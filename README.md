@@ -1,286 +1,194 @@
 # Deepfake Image Detection using Vision Transformer (ViT)
 
-A deepfake image detection system built using **Vision Transformer (ViT-Base Patch16-224)** and **transfer learning**. The project fine-tunes a pretrained Vision Transformer to classify facial images as **Real** or **Fake**.
+A deepfake image detection system that fine-tunes a pretrained **Vision Transformer (google/vit-base-patch16-224)** with transfer learning to classify facial images as **Real** or **Fake**.
 
 ---
 
 ## Overview
 
-Deepfake technology has advanced rapidly in recent years, making manipulated images increasingly difficult to distinguish from authentic ones. This project uses a pretrained Vision Transformer (ViT) to detect manipulated facial images through binary classification.
-
-Instead of training a transformer from scratch, transfer learning is used with the pretrained **google/vit-base-patch16-224** model available through Hugging Face Transformers.
+Instead of training a transformer from scratch, this project fine-tunes the pretrained `google/vit-base-patch16-224` model from Hugging Face Transformers. The classifier head is replaced with a 2-class head for real vs fake classification.
 
 ---
 
 ## Features
 
-- Vision Transformer (ViT-Base Patch16-224)
-- Transfer Learning
-- Binary Classification (Real / Fake)
-- GPU Acceleration (CUDA)
-- PyTorch Implementation
-- Hugging Face Transformers
-- Automatic Dataset Loading using ImageFolder
-- Confusion Matrix Generation
-- Accuracy, Precision, Recall and F1 Score Evaluation
-- Model Checkpoint Saving
+- Vision Transformer (ViT-Base Patch16-224) with transfer learning
+- Binary classification (Real / Fake)
+- GPU acceleration (CUDA) with PyTorch
+- Dataset loading with `ImageFolder`
+- Accuracy, precision, recall and F1 evaluation, plus confusion matrix (see `utils.py`)
+- Best-model checkpointing
 
 ---
 
 ## Project Structure
 
 ```text
-deepfake_detection_vit/
-│
-├── dataset/
-│   └── real_vs_fake/
-│       └── real-vs-fake/
-│           ├── train/
-│           │   ├── real/
-│           │   └── fake/
-│           │
-│           └── test/
-│               ├── real/
-│               └── fake/
-│
-├── models/
-│   └── best_model.pth
-│
-├── results/
-│   ├── confusion_matrix.png
-│   └── metrics.txt
-│
-├── train.py
-├── predict.py
-├── utils.py
-├── requirements.txt
-├── README.md
-└── report.pdf
+deepfake_detector/
+  train.py            training and evaluation loop
+  predict.py          run the trained model on an image
+  utils.py            evaluation metrics
+  requirements.txt
+  README.md
+  dataset/            not included; see Dataset below
+  models/             created when you train (best_model.pth)
 ```
 
 ---
 
 ## Dataset
 
-**Dataset Used**
+**140K Real and Fake Faces**
 
-140K Real and Fake Faces Dataset
-
-Dataset Statistics
-
-| Split | Images |
-|--------|--------|
+| Split | Images in dataset |
+|-------|-------------------|
 | Training | 100,000 |
 | Testing | 20,000 |
 
-Due to project deadline and computational constraints, a subset was used during training.
+Because of time and GPU constraints, a random subset was used for the results below:
 
-| Split | Images Used |
-|--------|-------------|
+| Split | Images used |
+|-------|-------------|
 | Training | 10,000 |
 | Testing | 2,000 |
 
-Classes
+The subset is sampled with a fixed seed (42). Classes: Real, Fake.
 
-- Real
-- Fake
+Expected folder layout:
+
+```text
+dataset/
+  real_vs_fake/
+    real-vs-fake/
+      train/
+        fake/
+        real/
+      test/
+        fake/
+        real/
+```
 
 ---
 
 ## Model
 
-Pretrained Backbone
+Pretrained backbone: `google/vit-base-patch16-224`
 
-```
-google/vit-base-patch16-224
-```
-
-The classifier head was replaced to perform binary classification while the pretrained ImageNet weights were fine-tuned using transfer learning.
+The classifier head is replaced for binary classification and the pretrained ImageNet weights are fine-tuned.
 
 ---
 
 ## Hyperparameters
 
 | Parameter | Value |
-|------------|-------|
+|-----------|-------|
 | Epochs | 2 |
-| Batch Size | 16 |
-| Learning Rate | 2e-5 |
+| Batch size | 16 |
+| Learning rate | 2e-5 |
 | Optimizer | AdamW |
-| Loss Function | CrossEntropyLoss |
-| Image Size | 224 × 224 |
-| Device | NVIDIA RTX 4050 Laptop GPU |
-
----
-
-## Technologies Used
-
-- Python
-- PyTorch
-- Hugging Face Transformers
-- torchvision
-- scikit-learn
-- matplotlib
-- NumPy
-- tqdm
+| Loss | CrossEntropyLoss |
+| Image size | 224 x 224 |
+| Hardware | NVIDIA RTX 4050 Laptop GPU (6 GB) |
 
 ---
 
 ## Installation
 
-Clone the repository
+Clone the repository:
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/deepfake-image-detection-vit.git
-
-cd deepfake-image-detection-vit
+git clone https://github.com/DivyanBabbar/deepfake_detector.git
+cd deepfake_detector
 ```
 
-Create a virtual environment
+Create and activate a virtual environment.
 
-```bash
-python -m venv .venv
-```
-
-Activate the environment
-
-### Windows
+Windows (PowerShell):
 
 ```powershell
+python -m venv .venv
 .venv\Scripts\activate
 ```
 
-### Linux / macOS
+Linux / macOS:
 
 ```bash
+python -m venv .venv
 source .venv/bin/activate
 ```
 
-Install dependencies
+Install dependencies:
 
 ```bash
 pip install -r requirements.txt
 ```
 
----
+**GPU note:** `pip install torch` may install a CPU-only build. Install the CUDA build of PyTorch from pytorch.org, then confirm:
 
-## Dataset Structure
-
-Place the dataset inside
-
-```text
-dataset/
+```python
+import torch
+print(torch.cuda.is_available())
 ```
 
-Expected structure
-
-```text
-dataset
-└── real_vs_fake
-    └── real-vs-fake
-        ├── train
-        │   ├── fake
-        │   └── real
-        │
-        └── test
-            ├── fake
-            └── real
-```
+This should print `True` before you start training.
 
 ---
 
 ## Training
 
-Run
-
 ```bash
 python train.py
 ```
 
-The training script automatically
+The script loads the dataset subset, fine-tunes the ViT, evaluates on the test subset after each epoch, and saves the best model to `models/best_model.pth`.
 
-- Loads dataset
-- Applies preprocessing
-- Fine-tunes ViT
-- Evaluates on test data
-- Saves the best model
-- Generates confusion matrix
-- Stores evaluation metrics
+**Windows note:** DataLoader uses `num_workers=0`. With worker processes, Windows raised multiprocessing errors. This is slower but stable.
 
 ---
 
 ## Results
 
+Evaluated on the **2,000-image test subset** (not the full 20,000-image test set):
+
 | Metric | Score |
-|---------|-------|
-| Accuracy | **98.10%** |
-| Precision | **96.77%** |
-| Recall | **99.50%** |
-| F1 Score | **98.12%** |
+|--------|-------|
+| Accuracy | 98.10% |
+| Precision | 96.77% |
+| Recall | 99.50% |
+| F1 Score | 98.12% |
 
----
-
-## Sample Pipeline
-
-```text
-Dataset
-      │
-      ▼
-Image Preprocessing
-      │
-      ▼
-Resize (224×224)
-      │
-      ▼
-Normalization
-      │
-      ▼
-Vision Transformer
-      │
-      ▼
-Classification Head
-      │
-      ▼
-Prediction
-      │
-      ▼
-Real / Fake
-```
+These numbers come from one training run on a subset, so treat them as preliminary. Evaluation on the full test set and on other datasets is listed under Future Improvements.
 
 ---
 
 ## Future Improvements
 
-- Train using the complete 140K dataset
-- Increase training epochs
-- Compare with CNN architectures such as XceptionNet and EfficientNet
+- Train on the complete 100K training set and evaluate on the full 20K test set
+- Train for more epochs
+- Compare with CNN baselines such as XceptionNet and EfficientNet
 - Cross-dataset evaluation
 - Video-based deepfake detection
-- Explainable AI using Grad-CAM
+- Explainability with Grad-CAM
 - Lightweight transformer deployment
 
 ---
 
 ## References
 
-- Dosovitskiy et al. — *An Image is Worth 16×16 Words: Transformers for Image Recognition at Scale*
+- Dosovitskiy et al., *An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale*
 - FaceForensics++
 - Celeb-DF
 - DeepFake Detection Challenge (DFDC)
-- Hugging Face Transformers Documentation
-- PyTorch Documentation
+- Hugging Face Transformers documentation
+- PyTorch documentation
 
 ---
 
 ## Author
 
 **Divyan Babbar**
-
-B.Tech EC-ACT
-
-Jaypee Institute of Information Technology
-
-Email: **divyanbabbar453@gmail.com**
+B.Tech ECE (Advanced Communication Technology), Jaypee Institute of Information Technology
+Email: divyanbabbar453@gmail.com
 
 ---
 
