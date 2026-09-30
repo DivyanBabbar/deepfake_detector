@@ -3,12 +3,13 @@ import random
 
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader, Subset
-from torchvision import datasets, transforms
-from transformers import ViTForImageClassification
 from sklearn.metrics import accuracy_score
+from torch.utils.data import DataLoader, Subset
+from torchvision import datasets
 from tqdm import tqdm
+from transformers import ViTForImageClassification
 
+from common import build_transform
 from utils import evaluate
 
 # ==========================
@@ -21,7 +22,6 @@ TRAIN_DIR = "dataset/real_vs_fake/real-vs-fake/train"
 TEST_DIR = "dataset/real_vs_fake/real-vs-fake/test"
 
 BATCH_SIZE = 16
-IMAGE_SIZE = 224
 EPOCHS = 2
 LEARNING_RATE = 2e-5
 
@@ -36,19 +36,21 @@ SEED = 42
 # DATA
 # ==========================
 
-def build_loaders():
-    transform = transforms.Compose([
-        transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
-    ])
+def build_loaders(
+    train_dir=TRAIN_DIR,
+    test_dir=TEST_DIR,
+    train_subset=TRAIN_SUBSET_SIZE,
+    test_subset=TEST_SUBSET_SIZE,
+    batch_size=BATCH_SIZE,
+):
+    transform = build_transform()
 
-    train_dataset = datasets.ImageFolder(TRAIN_DIR, transform=transform)
-    test_dataset = datasets.ImageFolder(TEST_DIR, transform=transform)
+    train_dataset = datasets.ImageFolder(train_dir, transform=transform)
+    test_dataset = datasets.ImageFolder(test_dir, transform=transform)
 
     random.seed(SEED)
-    train_indices = random.sample(range(len(train_dataset)), TRAIN_SUBSET_SIZE)
-    test_indices = random.sample(range(len(test_dataset)), TEST_SUBSET_SIZE)
+    train_indices = random.sample(range(len(train_dataset)), min(train_subset, len(train_dataset)))
+    test_indices = random.sample(range(len(test_dataset)), min(test_subset, len(test_dataset)))
 
     train_dataset = Subset(train_dataset, train_indices)
     test_dataset = Subset(test_dataset, test_indices)
@@ -64,7 +66,7 @@ def build_loaders():
 
     train_loader = DataLoader(
         train_dataset,
-        batch_size=BATCH_SIZE,
+        batch_size=batch_size,
         shuffle=True,
         num_workers=0,
         pin_memory=pin,
@@ -72,7 +74,7 @@ def build_loaders():
 
     test_loader = DataLoader(
         test_dataset,
-        batch_size=BATCH_SIZE,
+        batch_size=batch_size,
         shuffle=False,
         num_workers=0,
         pin_memory=pin,
@@ -85,13 +87,13 @@ def build_loaders():
 # TRAIN ONE EPOCH
 # ==========================
 
-def train_one_epoch(model, loader, optimizer, criterion):
+def train_one_epoch(model, loader, optimizer, criterion, device=DEVICE):
     model.train()
     total_loss = 0
 
     for images, labels in tqdm(loader):
-        images = images.to(DEVICE)
-        labels = labels.to(DEVICE)
+        images = images.to(device)
+        labels = labels.to(device)
 
         optimizer.zero_grad()
 
@@ -110,7 +112,7 @@ def train_one_epoch(model, loader, optimizer, criterion):
 # EVALUATION
 # ==========================
 
-def validate(model, loader):
+def validate(model, loader, device=DEVICE, output_dir="results"):
     model.eval()
 
     predictions = []
@@ -118,8 +120,8 @@ def validate(model, loader):
 
     with torch.no_grad():
         for images, labels in tqdm(loader):
-            images = images.to(DEVICE)
-            labels = labels.to(DEVICE)
+            images = images.to(device)
+            labels = labels.to(device)
 
             outputs = model(pixel_values=images).logits
             preds = torch.argmax(outputs, dim=1)
@@ -127,7 +129,7 @@ def validate(model, loader):
             predictions.extend(preds.cpu().numpy())
             labels_list.extend(labels.cpu().numpy())
 
-    evaluate(labels_list, predictions)
+    evaluate(labels_list, predictions, output_dir=output_dir)
 
     return accuracy_score(labels_list, predictions)
 

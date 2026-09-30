@@ -1,14 +1,9 @@
 torch
 torchvision
 transformers
-timm
-accelerate
-datasets
+scikit-learn
 numpy
-pandas
 matplotlib
 seaborn
-opencv-python
 Pillow
-scikit-learn
 tqdm

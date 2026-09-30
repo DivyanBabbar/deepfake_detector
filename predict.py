@@ -1,39 +1,53 @@
+import argparse
+
 import torch
 from PIL import Image
-from torchvision import transforms
 from transformers import ViTForImageClassification
 
+from common import LABELS, build_transform
+
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+MODEL_NAME = "google/vit-base-patch16-224"
+WEIGHTS_PATH = "models/best_model.pth"
 
-transform = transforms.Compose([
-    transforms.Resize((224, 224)),
-    transforms.ToTensor(),
-    transforms.Normalize(
-        mean=[0.5, 0.5, 0.5],
-        std=[0.5, 0.5, 0.5]
+
+def load_model(weights_path=WEIGHTS_PATH, device=DEVICE):
+    model = ViTForImageClassification.from_pretrained(
+        MODEL_NAME,
+        num_labels=2,
+        ignore_mismatched_sizes=True,
     )
-])
+    model.load_state_dict(torch.load(weights_path, map_location=device))
+    model.to(device)
+    model.eval()
+    return model
 
-model = ViTForImageClassification.from_pretrained(
-    "google/vit-base-patch16-224",
-    num_labels=2,
-    ignore_mismatched_sizes=True
-)
 
-model.load_state_dict(torch.load("models/best_model.pth", map_location=DEVICE))
-model.to(DEVICE)
-model.eval()
+def predict_image(model, image_path, device=DEVICE):
+    """Return (label, confidence) for one image."""
+    image = Image.open(image_path).convert("RGB")
+    tensor = build_transform()(image).unsqueeze(0).to(device)
 
-image_path = input("Enter image path: ")
+    with torch.no_grad():
+        logits = model(pixel_values=tensor).logits
+        probabilities = torch.softmax(logits, dim=1)[0]
 
-image = Image.open(image_path).convert("RGB")
-image = transform(image).unsqueeze(0).to(DEVICE)
+    index = int(torch.argmax(probabilities).item())
+    return LABELS[index], float(probabilities[index].item())
 
-with torch.no_grad():
-    output = model(pixel_values=image).logits
-    prediction = torch.argmax(output, dim=1).item()
 
-if prediction == 0:
-    print("Prediction: FAKE")
-else:
-    print("Prediction: REAL")
+def main():
+    parser = argparse.ArgumentParser(description="Classify a face image as real or fake.")
+    parser.add_argument("image", nargs="?", help="Path to the image")
+    parser.add_argument("--weights", default=WEIGHTS_PATH, help="Path to model weights")
+    args = parser.parse_args()
+
+    image_path = args.image or input("Enter image path: ")
+
+    model = load_model(args.weights)
+    label, confidence = predict_image(model, image_path)
+    print(f"Prediction: {label} ({confidence:.1%} confidence)")
+
+
+if __name__ == "__main__":
+    main()

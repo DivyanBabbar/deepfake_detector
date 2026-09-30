@@ -1,5 +1,7 @@
 # Deepfake Image Detection using Vision Transformer (ViT)
 
+![tests](https://github.com/DivyanBabbar/deepfake_detector/actions/workflows/tests.yml/badge.svg)
+
 A deepfake image detection system that fine-tunes a pretrained **Vision Transformer (google/vit-base-patch16-224)** with transfer learning to classify facial images as **Real** or **Fake**.
 
 ---
@@ -13,11 +15,12 @@ Instead of training a transformer from scratch, this project fine-tunes the pret
 ## Features
 
 - Vision Transformer (ViT-Base Patch16-224) with transfer learning
-- Binary classification (Real / Fake)
+- Binary classification (Real / Fake) with a confidence score
 - GPU acceleration (CUDA) with PyTorch
 - Dataset loading with `ImageFolder`
-- Accuracy, precision, recall and F1 evaluation, plus confusion matrix (see `utils.py`)
+- Accuracy, precision, recall and F1 evaluation, plus confusion matrix
 - Best-model checkpointing
+- Automated tests and linting on every push (GitHub Actions, Linux and Windows)
 
 ---
 
@@ -25,13 +28,18 @@ Instead of training a transformer from scratch, this project fine-tunes the pret
 
 ```text
 deepfake_detector/
-  train.py            training and evaluation loop
-  predict.py          run the trained model on an image
-  utils.py            evaluation metrics
+  train.py               training and evaluation loop
+  predict.py             classify a single image
+  common.py              preprocessing and label mapping shared by train and predict
+  utils.py               evaluation metrics and confusion matrix
+  tests/                 pytest suite
+  .github/workflows/     CI (lint + tests)
   requirements.txt
-  README.md
-  dataset/            not included; see Dataset below
-  models/             created when you train (best_model.pth)
+  requirements-dev.txt   adds pytest and ruff
+  pyproject.toml         pytest and ruff config
+  dataset/               not included; see Dataset below
+  models/                created when you train (best_model.pth)
+  results/               created when you train (metrics.txt, confusion_matrix.png)
 ```
 
 ---
@@ -52,7 +60,7 @@ Because of time and GPU constraints, a random subset was used for the results be
 | Training | 10,000 |
 | Testing | 2,000 |
 
-The subset is sampled with a fixed seed (42). Classes: Real, Fake.
+The subset is sampled with a fixed seed (42). Classes: Fake (label 0), Real (label 1).
 
 Expected folder layout:
 
@@ -94,7 +102,7 @@ The classifier head is replaced for binary classification and the pretrained Ima
 
 ## Installation
 
-Clone the repository:
+Tested with Python 3.12.
 
 ```bash
 git clone https://github.com/DivyanBabbar/deepfake_detector.git
@@ -146,6 +154,18 @@ The script loads the dataset subset, fine-tunes the ViT, evaluates on the test s
 
 ---
 
+## Prediction
+
+After training:
+
+```bash
+python predict.py path/to/image.jpg
+```
+
+Output looks like `Prediction: FAKE (97.3% confidence)`. Use `--weights` to load a different checkpoint.
+
+---
+
 ## Results
 
 Evaluated on the **2,000-image test subset** (not the full 20,000-image test set):
@@ -157,7 +177,31 @@ Evaluated on the **2,000-image test subset** (not the full 20,000-image test set
 | Recall | 99.50% |
 | F1 Score | 98.12% |
 
-These numbers come from one training run on a subset, so treat them as preliminary. Evaluation on the full test set and on other datasets is listed under Future Improvements.
+Precision, recall and F1 treat **Real** (label 1) as the positive class.
+
+These numbers come from one training run on a subset, so treat them as preliminary.
+
+---
+
+## Development
+
+```bash
+pip install -r requirements-dev.txt
+ruff check .
+pytest -q
+```
+
+The tests use a tiny randomly initialised ViT and generated images, so they need no GPU, no dataset and no model download. CI runs them on Linux and Windows for every push and pull request.
+
+The tests check that the code runs correctly. They do not measure model accuracy.
+
+---
+
+## Limitations
+
+- Trained on a 10,000-image subset for 2 epochs; not evaluated on the full test set
+- Evaluated on one dataset only, with no cross-dataset testing
+- Image-level detection of faces; not designed for video
 
 ---
 
