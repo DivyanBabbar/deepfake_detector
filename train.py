@@ -52,13 +52,19 @@ def build_loaders(
     full_test_dataset = datasets.ImageFolder(test_dir, transform=transform)
 
     rng = random.Random(SEED)
-    train_indices = rng.sample(range(len(full_train_dataset)), min(train_subset, len(full_train_dataset)))
-    test_indices = rng.sample(range(len(full_test_dataset)), min(test_subset, len(full_test_dataset)))
+    train_count = min(train_subset, len(full_train_dataset))
+    train_indices = rng.sample(range(len(full_train_dataset)), train_count)
+    test_count = min(test_subset, len(full_test_dataset))
+    test_indices = rng.sample(range(len(full_test_dataset)), test_count)
 
     # Split only the training directory; keep the official test directory untouched
     # until the selected checkpoint is evaluated after training.
     rng.shuffle(train_indices)
-    validation_size = max(1, int(len(train_indices) * validation_fraction)) if len(train_indices) > 1 else 0
+    validation_size = (
+        max(1, int(len(train_indices) * validation_fraction))
+        if len(train_indices) > 1
+        else 0
+    )
     validation_indices = train_indices[:validation_size]
     fit_indices = train_indices[validation_size:]
     train_dataset = Subset(full_train_dataset, fit_indices)
