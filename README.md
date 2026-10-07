@@ -148,7 +148,7 @@ This should print `True` before you start training.
 python train.py
 ```
 
-The script loads the dataset subset, fine-tunes the ViT, evaluates on the test subset after each epoch, and saves the best model to `models/best_model.pth`.
+The script samples the training directory, splits that sample into training and validation sets, and selects the best checkpoint using validation accuracy. It evaluates the selected checkpoint on the held-out test subset once after training. Metrics are saved separately under `results/validation/` and `results/test/` so they cannot be mistaken for one another.
 
 **Windows note:** DataLoader uses `num_workers=0`. With worker processes, Windows raised multiprocessing errors. This is slower but stable.
 

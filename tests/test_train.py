@@ -15,21 +15,21 @@ def make_image_folder(root, per_class=6):
                 Image.new("RGB", (32, 32), color).save(folder / f"{i}.png")
 
 
-def test_build_loaders_uses_subset_and_no_workers(tmp_path):
+def test_build_loaders_uses_train_validation_test_and_no_workers(tmp_path):
     make_image_folder(tmp_path)
 
-    train_loader, test_loader = train.build_loaders(
+    train_loader, validation_loader, test_loader = train.build_loaders(
         train_dir=str(tmp_path / "train"),
         test_dir=str(tmp_path / "test"),
-        train_subset=4,
+        train_subset=10,
         test_subset=2,
         batch_size=2,
     )
 
-    assert len(train_loader.dataset) == 4
+    assert len(train_loader.dataset) + len(validation_loader.dataset) == 10
+    assert len(validation_loader.dataset) == 2
     assert len(test_loader.dataset) == 2
-    assert train_loader.num_workers == 0
-    # Class order matters: predict.py maps 0 -> FAKE and 1 -> REAL.
+    assert train_loader.num_workers == validation_loader.num_workers == test_loader.num_workers == 0
     assert train_loader.dataset.dataset.classes == ["fake", "real"]
 
     images, labels = next(iter(train_loader))
@@ -40,7 +40,7 @@ def test_build_loaders_uses_subset_and_no_workers(tmp_path):
 def test_subset_larger_than_dataset_is_capped(tmp_path):
     make_image_folder(tmp_path)
 
-    train_loader, _ = train.build_loaders(
+    train_loader, validation_loader, test_loader = train.build_loaders(
         train_dir=str(tmp_path / "train"),
         test_dir=str(tmp_path / "test"),
         train_subset=1000,
@@ -48,7 +48,8 @@ def test_subset_larger_than_dataset_is_capped(tmp_path):
         batch_size=2,
     )
 
-    assert len(train_loader.dataset) == 12
+    assert len(train_loader.dataset) + len(validation_loader.dataset) == 12
+    assert len(test_loader.dataset) == 12
 
 
 def test_train_one_epoch_returns_finite_loss(tiny_model, fake_batches):
