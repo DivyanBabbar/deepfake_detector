@@ -42,45 +42,51 @@ def build_loaders(
     train_subset=TRAIN_SUBSET_SIZE,
     test_subset=TEST_SUBSET_SIZE,
     batch_size=BATCH_SIZE,
+    validation_fraction=0.2,
 ):
+    if not 0 < validation_fraction < 1:
+        raise ValueError("validation_fraction must be between 0 and 1")
+
     transform = build_transform()
+    full_train_dataset = datasets.ImageFolder(train_dir, transform=transform)
+    full_test_dataset = datasets.ImageFolder(test_dir, transform=transform)
 
-    train_dataset = datasets.ImageFolder(train_dir, transform=transform)
-    test_dataset = datasets.ImageFolder(test_dir, transform=transform)
+    rng = random.Random(SEED)
+    train_count = min(train_subset, len(full_train_dataset))
+    train_indices = rng.sample(range(len(full_train_dataset)), train_count)
+    test_count = min(test_subset, len(full_test_dataset))
+    test_indices = rng.sample(range(len(full_test_dataset)), test_count)
 
-    random.seed(SEED)
-    train_indices = random.sample(range(len(train_dataset)), min(train_subset, len(train_dataset)))
-    test_indices = random.sample(range(len(test_dataset)), min(test_subset, len(test_dataset)))
+    # Split only the training directory; keep the official test directory untouched
+    # until the selected checkpoint is evaluated after training.
+    rng.shuffle(train_indices)
+    validation_size = (
+        max(1, int(len(train_indices) * validation_fraction))
+        if len(train_indices) > 1
+        else 0
+    )
+    validation_indices = train_indices[:validation_size]
+    fit_indices = train_indices[validation_size:]
+    train_dataset = Subset(full_train_dataset, fit_indices)
+    validation_dataset = Subset(full_train_dataset, validation_indices)
+    test_dataset = Subset(full_test_dataset, test_indices)
 
-    train_dataset = Subset(train_dataset, train_indices)
-    test_dataset = Subset(test_dataset, test_indices)
-
-    print("Classes:", ["fake", "real"])
+    print("Classes:", full_train_dataset.classes)
     print("Train images:", len(train_dataset))
+    print("Validation images:", len(validation_dataset))
     print("Test images:", len(test_dataset))
 
     # num_workers=0: on Windows, DataLoader worker processes are started with
     # "spawn", which caused multiprocessing crashes. Loading in the main
     # process avoids that, at the cost of slower data loading.
     pin = DEVICE.type == "cuda"
-
-    train_loader = DataLoader(
-        train_dataset,
-        batch_size=batch_size,
-        shuffle=True,
-        num_workers=0,
-        pin_memory=pin,
-    )
-
-    test_loader = DataLoader(
-        test_dataset,
-        batch_size=batch_size,
-        shuffle=False,
-        num_workers=0,
-        pin_memory=pin,
-    )
-
-    return train_loader, test_loader
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True,
+                              num_workers=0, pin_memory=pin)
+    validation_loader = DataLoader(validation_dataset, batch_size=batch_size, shuffle=False,
+                                   num_workers=0, pin_memory=pin)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False,
+                             num_workers=0, pin_memory=pin)
+    return train_loader, validation_loader, test_loader
 
 
 # ==========================
@@ -146,7 +152,7 @@ def main():
     if DEVICE.type == "cuda":
         print("GPU:", torch.cuda.get_device_name(0))
 
-    train_loader, test_loader = build_loaders()
+    train_loader, validation_loader, test_loader = build_loaders()
 
     model = ViTForImageClassification.from_pretrained(
         "google/vit-base-patch16-224",
@@ -166,7 +172,7 @@ def main():
         loss = train_one_epoch(model, train_loader, optimizer, criterion)
         print(f"Training Loss: {loss:.4f}")
 
-        acc = validate(model, test_loader)
+        acc = validate(model, validation_loader, output_dir="results/validation")
         print(f"Validation Accuracy: {acc:.4f}")
 
         if acc > best_acc:
@@ -174,8 +180,14 @@ def main():
             torch.save(model.state_dict(), "models/best_model.pth")
             print("Best model saved.")
 
+    if not os.path.exists("models/best_model.pth"):
+        raise RuntimeError("Training produced no checkpoint; validation set may be empty.")
+    model.load_state_dict(torch.load("models/best_model.pth", map_location=DEVICE))
+    test_acc = validate(model, test_loader, output_dir="results/test")
+
     print("\nTraining Complete!")
-    print("Best Accuracy:", best_acc)
+    print("Best Validation Accuracy:", best_acc)
+    print("Final Test Accuracy:", test_acc)
 
 
 if __name__ == "__main__":
